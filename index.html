@@ -1251,27 +1251,62 @@
     const fontSizeInc     = $('fontSizeInc');
     const fontSizeDec     = $('fontSizeDec');
 
-    // Curated writing fonts (google: false = system font, no network request needed)
+    // Curated writing fonts grouped by category
     const FONTS = [
-      { label: 'Georgia',           value: 'Georgia',           google: false },
-      { label: 'Lora',              value: 'Lora',              google: true  },
-      { label: 'Playfair Display',  value: 'Playfair Display',  google: true  },
-      { label: 'Merriweather',      value: 'Merriweather',      google: true  },
-      { label: 'EB Garamond',       value: 'EB Garamond',       google: true  },
-      { label: 'Crimson Text',      value: 'Crimson Text',      google: true  },
-      { label: 'Inter',             value: 'Inter',             google: true  },
-      { label: 'Source Sans 3',     value: 'Source Sans 3',     google: true  },
-      { label: 'Nunito',            value: 'Nunito',            google: true  },
-      { label: 'IBM Plex Mono',     value: 'IBM Plex Mono',     google: true  },
-      { label: 'Inconsolata',       value: 'Inconsolata',       google: true  },
+      // ── Serif ─────────────────────────────────────────────────────
+      { label: 'Georgia',            value: 'Georgia',            google: false, cat: 'Serif' },
+      { label: 'Lora',               value: 'Lora',               google: true,  cat: 'Serif' },
+      { label: 'Merriweather',       value: 'Merriweather',       google: true,  cat: 'Serif' },
+      { label: 'Playfair Display',   value: 'Playfair Display',   google: true,  cat: 'Serif' },
+      { label: 'EB Garamond',        value: 'EB Garamond',        google: true,  cat: 'Serif' },
+      { label: 'Crimson Text',       value: 'Crimson Text',       google: true,  cat: 'Serif' },
+      { label: 'Cormorant Garamond', value: 'Cormorant Garamond', google: true,  cat: 'Serif' },
+      { label: 'Libre Baskerville',  value: 'Libre Baskerville',  google: true,  cat: 'Serif' },
+      { label: 'Spectral',           value: 'Spectral',           google: true,  cat: 'Serif' },
+      { label: 'Bitter',             value: 'Bitter',             google: true,  cat: 'Serif' },
+      { label: 'Alegreya',           value: 'Alegreya',           google: true,  cat: 'Serif' },
+      { label: 'Vollkorn',           value: 'Vollkorn',           google: true,  cat: 'Serif' },
+      { label: 'Zilla Slab',         value: 'Zilla Slab',         google: true,  cat: 'Serif' },
+      // ── Sans-serif ────────────────────────────────────────────────
+      { label: 'Inter',              value: 'Inter',              google: true,  cat: 'Sans-serif' },
+      { label: 'Source Sans 3',      value: 'Source Sans 3',      google: true,  cat: 'Sans-serif' },
+      { label: 'Nunito',             value: 'Nunito',             google: true,  cat: 'Sans-serif' },
+      { label: 'Lato',               value: 'Lato',               google: true,  cat: 'Sans-serif' },
+      { label: 'Open Sans',          value: 'Open Sans',          google: true,  cat: 'Sans-serif' },
+      { label: 'Jost',               value: 'Jost',               google: true,  cat: 'Sans-serif' },
+      { label: 'DM Sans',            value: 'DM Sans',            google: true,  cat: 'Sans-serif' },
+      { label: 'Outfit',             value: 'Outfit',             google: true,  cat: 'Sans-serif' },
+      { label: 'Plus Jakarta Sans',  value: 'Plus Jakarta Sans',  google: true,  cat: 'Sans-serif' },
+      { label: 'Figtree',            value: 'Figtree',            google: true,  cat: 'Sans-serif' },
+      { label: 'Mulish',             value: 'Mulish',             google: true,  cat: 'Sans-serif' },
+      { label: 'Karla',              value: 'Karla',              google: true,  cat: 'Sans-serif' },
+      // ── Monospace ─────────────────────────────────────────────────
+      { label: 'IBM Plex Mono',      value: 'IBM Plex Mono',      google: true,  cat: 'Monospace' },
+      { label: 'Inconsolata',        value: 'Inconsolata',        google: true,  cat: 'Monospace' },
+      { label: 'Fira Code',          value: 'Fira Code',          google: true,  cat: 'Monospace' },
+      { label: 'Source Code Pro',    value: 'Source Code Pro',    google: true,  cat: 'Monospace' },
+      { label: 'JetBrains Mono',     value: 'JetBrains Mono',     google: true,  cat: 'Monospace' },
+      { label: 'Space Mono',         value: 'Space Mono',         google: true,  cat: 'Monospace' },
+      // ── Display ───────────────────────────────────────────────────
+      { label: 'DM Serif Display',   value: 'DM Serif Display',   google: true,  cat: 'Display' },
+      { label: 'Fraunces',           value: 'Fraunces',           google: true,  cat: 'Display' },
+      { label: 'Libre Caslon Text',  value: 'Libre Caslon Text',  google: true,  cat: 'Display' },
+      { label: 'Yeseva One',         value: 'Yeseva One',         google: true,  cat: 'Display' },
     ];
 
-    // Populate font dropdown
-    FONTS.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f.value;
-      opt.textContent = f.label;
-      fontSelect.appendChild(opt);
+    // Populate font dropdown grouped by category
+    const fontGroups = {};
+    FONTS.forEach(f => { (fontGroups[f.cat] = fontGroups[f.cat] || []).push(f); });
+    Object.entries(fontGroups).forEach(([cat, fonts]) => {
+      const group = document.createElement('optgroup');
+      group.label = cat;
+      fonts.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.value;
+        opt.textContent = f.label;
+        group.appendChild(opt);
+      });
+      fontSelect.appendChild(group);
     });
 
     function loadGoogleFont(name) {
