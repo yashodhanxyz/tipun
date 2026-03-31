@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fafaf8;
+      --fg: #1a1a1a;
+      --muted: #aaa;
+      --accent: #4a9eff;
+      --max-w: 660px;
+      --editor-font: Georgia, 'Times New Roman', serif;
+      --font-size: 19px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #181818;
+      --fg: #d0d0cc;
+      --muted: #505050;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--fg);
+      transition: background 0.25s, color 0.25s;
+    }
+
+    /* ─── Page ─── */
+    .page {
+      height: 100vh;
+      padding: 64px 24px 56px;
+      overflow: hidden;
+    }
+
+    .editor-container {
+      position: relative;
+      width: 100%;
+      max-width: var(--max-w);
+      height: 100%;
+      margin: 0 auto;
+    }
+
+    /* Shared surface: both layers must have identical font/spacing/padding */
+    #editor, #editorHL {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      font-family: var(--editor-font);
+      font-size: var(--font-size);
+      line-height: 1.85;
+      padding-top: calc(50vh - 100px);
+      padding-bottom: 120px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Writing layer — transparent text so highlight shows through */
+    #editor {
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      overflow-y: auto;
+      scrollbar-width: none;
+      color: transparent;
+      caret-color: var(--accent);
+      z-index: 2;
+    }
+
+    #editor::-webkit-scrollbar { display: none; }
+    #editor::placeholder { color: var(--muted); }
+
+    /* Highlight layer — rendered markdown, sits behind the textarea */
+    #editorHL {
+      color: var(--fg);
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 1;
+      border: none;
+      background: transparent;
+    }
+
+    /* ─── Markdown highlight classes ─── */
+    #editorHL strong { font-weight: bold; }
+    #editorHL em     { font-style: italic; }
+    #editorHL s      { text-decoration: line-through; }
+    .hl-s            { opacity: 0.3; }         /* syntax markers: ** * ~~ # > */
+    .hl-heading      { font-weight: bold; }
+    .hl-quote        { color: var(--muted); font-style: italic; }
+    .hl-code         { font-family: 'Courier New', monospace; font-size: 0.88em; }
+    .hl-code-fence   { font-family: 'Courier New', monospace; color: var(--muted); }
+    .hl-link         { color: var(--accent); }
+
+    /* ─── Focus mode ─── */
+    .focus-mode .page {
+      -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(0,0,0,0.3) 18%,
+        black 32%,
+        black 68%,
+        rgba(0,0,0,0.3) 82%,
+        transparent 100%
+      );
+      mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(0,0,0,0.3) 18%,
+        black 32%,
+        black 68%,
+        rgba(0,0,0,0.3) 82%,
+        transparent 100%
+      );
+    }
+
+    /* ─── Preview ─── */
+    .preview-page {
+      display: none;
+      height: 100vh;
+      padding: 64px 24px 56px;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .preview-page::-webkit-scrollbar { display: none; }
+    .preview-page.active { display: block; }
+    .page.hidden { display: none; }
+
+    #preview {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      font-family: var(--editor-font);
+      font-size: var(--font-size);
+      line-height: 1.85;
+      color: var(--fg);
+    }
+
+    #preview h1 { font-size: 1.7em; margin: 0 0 0.6em; }
+    #preview h2 { font-size: 1.3em; margin: 1.8em 0 0.4em; }
+    #preview h3 { font-size: 1.05em; margin: 1.5em 0 0.3em; font-weight: bold; }
+    #preview p  { margin: 0 0 1em; }
+    #preview ul, #preview ol { margin: 0 0 1em; padding-left: 1.5em; }
+    #preview li { margin-bottom: 0.25em; }
+    #preview blockquote {
+      margin: 0 0 1em;
+      padding-left: 1.2em;
+      border-left: 2px solid var(--muted);
+      color: var(--muted);
+      font-style: italic;
+    }
+    #preview code {
+      font-family: 'Courier New', monospace;
+      font-size: 0.82em;
+      background: rgba(128,128,128,0.1);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    #preview pre {
+      background: rgba(128,128,128,0.07);
+      padding: 1.2em;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 0 0 1em;
+    }
+    #preview pre code { background: none; padding: 0; }
+    #preview hr { border: none; border-top: 1px solid rgba(128,128,128,0.2); margin: 2em 0; }
+    #preview a { color: var(--accent); text-decoration: none; }
+    #preview a:hover { text-decoration: underline; }
+
+    /* ─── Toolbar ─── */
+    .toolbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: var(--bg);
+      border-top: 1px solid rgba(128,128,128,0.08);
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      z-index: 100;
+    }
+
+    body:not(.writing) .toolbar,
+    .toolbar:hover { opacity: 1; }
+
+    .focus-mode .toolbar       { opacity: 0 !important; pointer-events: none; }
+    .focus-mode .toolbar:hover { opacity: 0.7 !important; pointer-events: auto; }
+
+    .stat { color: var(--muted); }
+
+    .sep {
+      width: 1px;
+      height: 14px;
+      background: rgba(128,128,128,0.2);
+    }
+
+    .btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .btn:hover { color: var(--fg); background: rgba(128,128,128,0.1); }
+    .btn.active { color: var(--accent); }
+
+    /* Export dropdown */
+    .export-wrap { position: relative; }
+
+    .export-dropdown {
+      position: absolute;
+      bottom: calc(100% + 6px);
+      right: 0;
+      background: var(--bg);
+      border: 1px solid rgba(128,128,128,0.15);
+      border-radius: 6px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition: opacity 0.15s, transform 0.15s;
+    }
+
+    .export-dropdown.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .export-dropdown .btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 9px 16px;
+      border-radius: 0;
+    }
+
+    /* ─── Command palette ─── */
+    .palette-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+      z-index: 200;
+    }
+
+    .palette-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .palette {
+      background: var(--bg);
+      border: 1px solid rgba(128,128,128,0.15);
+      border-radius: 10px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+      width: 360px;
+      overflow: hidden;
+      transform: translateY(-8px) scale(0.98);
+      transition: transform 0.15s;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .palette-backdrop.open .palette {
+      transform: translateY(0) scale(1);
+    }
+
+    .palette-header {
+      padding: 14px 18px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(128,128,128,0.08);
+    }
+
+    .palette-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px;
+      font-size: 13px;
+      color: var(--fg);
+    }
+
+    .palette-row + .palette-row {
+      border-top: 1px solid rgba(128,128,128,0.06);
+    }
+
+    .palette-keys {
+      display: flex;
+      gap: 4px;
+    }
+
+    .key {
+      display: inline-block;
+      background: rgba(128,128,128,0.1);
+      border: 1px solid rgba(128,128,128,0.18);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: inherit;
+      line-height: 1.5;
+    }
+
+    .palette-footer {
+      padding: 10px 18px;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid rgba(128,128,128,0.08);
+      text-align: center;
+    }
+
+    /* ─── Floating format toolbar ─── */
+    .fmt-toolbar {
+      position: fixed;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 4px;
+      background: var(--bg);
+      border: 1px solid rgba(128,128,128,0.15);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity 0.12s, transform 0.12s;
+      z-index: 300;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .fmt-toolbar.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .fmt-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--fg);
+      font-size: 13px;
+      font-family: inherit;
+      padding: 5px 9px;
+      border-radius: 5px;
+      line-height: 1;
+      transition: background 0.1s;
+    }
+
+    .fmt-btn:hover { background: rgba(128,128,128,0.12); }
+    .fmt-btn.fmt-sep-btn { color: var(--muted); font-size: 11px; }
+
+    .fmt-divider {
+      width: 1px;
+      height: 18px;
+      background: rgba(128,128,128,0.2);
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+
+    /* ─── Slash command menu ─── */
+    .slash-menu {
+      position: fixed;
+      background: var(--bg);
+      border: 1px solid rgba(128,128,128,0.15);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      width: 240px;
+      max-height: 300px;
+      overflow-y: auto;
+      scrollbar-width: none;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition: opacity 0.12s, transform 0.12s;
+      z-index: 300;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 4px;
+    }
+
+    .slash-menu::-webkit-scrollbar { display: none; }
+
+    .slash-menu.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .slash-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .slash-item:hover,
+    .slash-item.active { background: rgba(128,128,128,0.09); }
+
+    .slash-icon {
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(128,128,128,0.08);
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--fg);
+      flex-shrink: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .slash-label {
+      font-size: 13px;
+      color: var(--fg);
+      font-weight: 500;
+    }
+
+    .slash-desc {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    /* ─── Toolbar position variants ─── */
+
+    /* Top */
+    body.tb-top .toolbar {
+      top: 0; bottom: auto; left: 0; right: 0;
+      height: 44px; width: auto; flex-direction: row;
+      border-top: none;
+      border-bottom: 1px solid rgba(128,128,128,0.08);
+    }
+    body.tb-top .page,
+    body.tb-top .preview-page { padding: 108px 24px 24px; }
+    body.tb-top .export-dropdown { bottom: auto; top: calc(100% + 6px); }
+
+    /* Left */
+    body.tb-left .toolbar {
+      left: 0; right: auto; top: 0; bottom: 0;
+      width: 120px; height: auto; flex-direction: column;
+      border-top: none; border-right: 1px solid rgba(128,128,128,0.08);
+      justify-content: flex-start; padding: 20px 0; gap: 6px;
+    }
+    body.tb-left .page,
+    body.tb-left .preview-page { padding: 64px 24px 24px 144px; }
+    body.tb-left .sep { width: 40px; height: 1px; }
+    body.tb-left .export-dropdown { bottom: auto; right: auto; top: 0; left: calc(100% + 6px); }
+
+    /* Right */
+    body.tb-right .toolbar {
+      right: 0; left: auto; top: 0; bottom: 0;
+      width: 120px; height: auto; flex-direction: column;
+      border-top: none; border-left: 1px solid rgba(128,128,128,0.08);
+      justify-content: flex-start; padding: 20px 0; gap: 6px;
+    }
+    body.tb-right .page,
+    body.tb-right .preview-page { padding: 64px 144px 24px 24px; }
+    body.tb-right .sep { width: 40px; height: 1px; }
+    body.tb-right .export-dropdown { bottom: auto; left: auto; top: 0; right: calc(100% + 6px); }
+
+    /* ─── Settings panel ─── */
+    .settings-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.2);
+      z-index: 399;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .settings-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .settings-panel {
+      position: fixed;
+      top: 0; right: 0;
+      height: 100vh; width: 280px;
+      background: var(--bg);
+      border-left: 1px solid rgba(128,128,128,0.12);
+      box-shadow: -8px 0 32px rgba(0,0,0,0.08);
+      z-index: 400;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      overflow-y: auto;
+      scrollbar-width: none;
+      padding: 0 0 40px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .settings-panel::-webkit-scrollbar { display: none; }
+    .settings-panel.open { transform: translateX(0); }
+
+    .settings-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid rgba(128,128,128,0.08);
+      font-size: 13px; font-weight: 600; color: var(--fg);
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .settings-close {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 16px; padding: 2px 6px;
+      border-radius: 4px; line-height: 1;
+      transition: color 0.15s, background 0.15s;
+    }
+    .settings-close:hover { color: var(--fg); background: rgba(128,128,128,0.1); }
+
+    .settings-group {
+      padding: 20px 20px 0;
+    }
+    .settings-group + .settings-group {
+      padding-top: 24px;
+      border-top: 1px solid rgba(128,128,128,0.06);
+      margin-top: 20px;
+    }
+    .settings-label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .settings-label span { font-size: 12px; font-weight: 400;
+      letter-spacing: 0; text-transform: none; color: var(--fg); }
+
+    /* Toolbar position grid */
+    .pos-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .pos-btn {
+      background: rgba(128,128,128,0.06);
+      border: 1px solid rgba(128,128,128,0.12);
+      border-radius: 6px; cursor: pointer;
+      color: var(--fg); font-size: 12px;
+      font-family: inherit; padding: 8px 4px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pos-btn:hover { background: rgba(128,128,128,0.12); }
+    .pos-btn.active {
+      background: rgba(74,158,255,0.12);
+      border-color: var(--accent); color: var(--accent);
+    }
+
+    /* Font select */
+    .settings-select {
+      width: 100%; padding: 9px 12px;
+      background: rgba(128,128,128,0.06);
+      border: 1px solid rgba(128,128,128,0.12);
+      border-radius: 6px; font-size: 13px;
+      color: var(--fg); font-family: inherit;
+      cursor: pointer; appearance: none; -webkit-appearance: none;
+    }
+    .settings-select:focus { outline: none; border-color: var(--accent); }
+
+    /* Font size slider */
+    .size-row { display: flex; align-items: center; gap: 10px; }
+    .size-btn {
+      background: rgba(128,128,128,0.08);
+      border: 1px solid rgba(128,128,128,0.12);
+      border-radius: 5px; cursor: pointer;
+      color: var(--fg); font-size: 16px;
+      width: 30px; height: 30px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .size-btn:hover { background: rgba(128,128,128,0.15); }
+    .size-val {
+      flex: 1; text-align: center; font-size: 14px;
+      color: var(--fg); font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page" id="page">
+    <div class="editor-container">
+      <div id="editorHL" aria-hidden="true"></div>
+      <textarea id="editor" placeholder="Start writing…" spellcheck="true" autocorrect="on"></textarea>
+    </div>
+  </div>
+
+  <div class="preview-page" id="previewPage">
+    <div id="preview"></div>
+  </div>
+
+  <div class="toolbar">
+    <span class="stat" id="wordCount">0 words</span>
+    <span class="stat" id="charCount">0 chars</span>
+    <div class="sep"></div>
+    <button class="btn" id="focusBtn">Focus</button>
+    <button class="btn" id="previewBtn">Preview</button>
+    <button class="btn" id="themeBtn">Dark</button>
+    <button class="btn" id="fullscreenBtn">Fullscreen</button>
+    <div class="sep"></div>
+    <div class="export-wrap">
+      <button class="btn" id="exportBtn">Export ↑</button>
+      <div class="export-dropdown" id="exportDropdown">
+        <button class="btn" id="exportMd">Save as .md</button>
+        <button class="btn" id="exportTxt">Save as .txt</button>
+      </div>
+    </div>
+    <div class="sep"></div>
+    <button class="btn" id="settingsBtn" title="Settings (⌘,)">⚙</button>
+  </div>
+
+  <!-- Settings -->
+  <div class="settings-overlay" id="settingsOverlay"></div>
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-head">
+      Settings
+      <button class="settings-close" id="settingsClose">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Toolbar position</div>
+      <div class="pos-grid">
+        <button class="pos-btn" data-pos="top">Top</button>
+        <button class="pos-btn active" data-pos="bottom">Bottom</button>
+        <button class="pos-btn" data-pos="left">Left</button>
+        <button class="pos-btn" data-pos="right">Right</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Font</div>
+      <select class="settings-select" id="fontSelect"></select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">
+        Font size
+        <span id="fontSizeVal">19px</span>
+      </div>
+      <div class="size-row">
+        <button class="size-btn" id="fontSizeDec">−</button>
+        <span class="size-val" id="fontSizeDisplay">19</span>
+        <button class="size-btn" id="fontSizeInc">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating format toolbar -->
+  <div class="fmt-toolbar" id="fmtToolbar">
+    <button class="fmt-btn" data-action="bold"   title="Bold (⌘B)"><b>B</b></button>
+    <button class="fmt-btn" data-action="italic" title="Italic (⌘I)"><i>I</i></button>
+    <button class="fmt-btn" data-action="strike" title="Strikethrough" style="text-decoration:line-through">S</button>
+    <div class="fmt-divider"></div>
+    <button class="fmt-btn" data-action="code"   title="Inline code" style="font-family:monospace;font-size:12px">&lt;/&gt;</button>
+    <button class="fmt-btn" data-action="link"   title="Link">⌘ Link</button>
+  </div>
+
+  <!-- Slash command menu -->
+  <div class="slash-menu" id="slashMenu"></div>
+
+  <!-- Command palette -->
+  <div class="palette-backdrop" id="paletteBackdrop">
+    <div class="palette" role="dialog" aria-label="Keyboard shortcuts">
+      <div class="palette-header">Keyboard shortcuts</div>
+      <div class="palette-row">
+        <span>Bold</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">B</kbd></span>
+      </div>
+      <div class="palette-row">
+        <span>Italic</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">I</kbd></span>
+      </div>
+      <div class="palette-row">
+        <span>Slash commands</span>
+        <span class="palette-keys"><kbd class="key">/</kbd><span style="font-size:11px;color:var(--muted);margin-left:4px">at line start</span></span>
+      </div>
+      <div class="palette-row">
+        <span>Focus mode</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">⇧</kbd><kbd class="key">F</kbd></span>
+      </div>
+      <div class="palette-row">
+        <span>Preview markdown</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">⇧</kbd><kbd class="key">V</kbd></span>
+      </div>
+      <div class="palette-row">
+        <span>Toggle dark mode</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">⇧</kbd><kbd class="key">D</kbd></span>
+      </div>
+      <div class="palette-row">
+        <span>Fullscreen</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">⇧</kbd><kbd class="key">G</kbd></span>
+      </div>
+      <div class="palette-row">
+        <span>Show shortcuts</span>
+        <span class="palette-keys"><kbd class="key">⌘</kbd><kbd class="key">K</kbd></span>
+      </div>
+      <div class="palette-footer">Press <kbd class="key">Esc</kbd> to close</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+
+    const editor         = $('editor');
+    const page           = $('page');
+    const previewPage    = $('previewPage');
+    const preview        = $('preview');
+    const wordCountEl    = $('wordCount');
+    const charCountEl    = $('charCount');
+    const focusBtn       = $('focusBtn');
+    const previewBtn     = $('previewBtn');
+    const themeBtn       = $('themeBtn');
+    const exportBtn        = $('exportBtn');
+    const exportDropdown   = $('exportDropdown');
+    const fullscreenBtn    = $('fullscreenBtn');
+    const paletteBackdrop  = $('paletteBackdrop');
+    const editorHL         = $('editorHL');
+
+    let isFocus = false, isPreview = false, isDark = false, writeTimer;
+
+    // ── Init ─────────────────────────────────────────────────────────
+
+    editor.value = localStorage.getItem('writer-content') || '';
+    updateStats();
+    if (localStorage.getItem('writer-theme') === 'dark') applyTheme(true);
+    editor.focus();
+    editor.selectionStart = editor.selectionEnd = editor.value.length;
+    syncHL();
+
+    // ── Input & auto-save ────────────────────────────────────────────
+
+    editor.addEventListener('input', () => {
+      localStorage.setItem('writer-content', editor.value);
+      updateStats();
+      document.body.classList.add('writing');
+      clearTimeout(writeTimer);
+      writeTimer = setTimeout(() => document.body.classList.remove('writing'), 1500);
+      if (isFocus) scrollToCursor();
+      checkSlashCommand();
+      scheduleHL();
+    });
+
+    // Tab inserts two spaces instead of moving focus
+    editor.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = editor.selectionStart;
+        editor.value = editor.value.slice(0, s) + '  ' + editor.value.slice(editor.selectionEnd);
+        editor.selectionStart = editor.selectionEnd = s + 2;
+      }
+    });
+
+    // ── Stats ─────────────────────────────────────────────────────────
+
+    function updateStats() {
+      const t = editor.value.trim();
+      const w = t ? t.split(/\s+/).filter(Boolean).length : 0;
+      wordCountEl.textContent = w === 1 ? '1 word' : `${w.toLocaleString()} words`;
+      charCountEl.textContent = `${editor.value.length.toLocaleString()} chars`;
+    }
+
+    // ── Focus mode ────────────────────────────────────────────────────
+
+    focusBtn.addEventListener('click', toggleFocus);
+
+    function toggleFocus() {
+      isFocus = !isFocus;
+      document.body.classList.toggle('focus-mode', isFocus);
+      focusBtn.classList.toggle('active', isFocus);
+      focusBtn.textContent = isFocus ? 'Unfocus' : 'Focus';
+      if (isFocus) { scrollToCursor(); editor.focus(); }
+    }
+
+    function scrollToCursor() {
+      const lh = parseFloat(getComputedStyle(editor).lineHeight);
+      const pt = parseFloat(getComputedStyle(editor).paddingTop) || 0;
+      const n  = editor.value.substring(0, editor.selectionStart).split('\n').length;
+      editor.scrollTop = Math.max(0, pt + (n - 1) * lh - editor.clientHeight / 2 + lh / 2);
+    }
+
+    // ── Preview ───────────────────────────────────────────────────────
+
+    previewBtn.addEventListener('click', togglePreview);
+
+    function togglePreview() {
+      isPreview = !isPreview;
+      if (isPreview) {
+        preview.innerHTML = marked.parse(editor.value || '_Nothing written yet._');
+        page.classList.add('hidden');
+        previewPage.classList.add('active');
+        previewBtn.classList.add('active');
+        previewBtn.textContent = 'Edit';
+      } else {
+        page.classList.remove('hidden');
+        previewPage.classList.remove('active');
+        previewBtn.classList.remove('active');
+        previewBtn.textContent = 'Preview';
+        editor.focus();
+      }
+    }
+
+    // ── Theme ─────────────────────────────────────────────────────────
+
+    themeBtn.addEventListener('click', () => applyTheme(!isDark));
+
+    function applyTheme(dark) {
+      isDark = dark;
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      themeBtn.textContent = dark ? 'Light' : 'Dark';
+      themeBtn.classList.toggle('active', dark);
+      localStorage.setItem('writer-theme', dark ? 'dark' : 'light');
+    }
+
+    // ── Export ────────────────────────────────────────────────────────
+
+    exportBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      exportDropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', () => exportDropdown.classList.remove('open'));
+    exportDropdown.addEventListener('click', e => e.stopPropagation());
+
+    function download(name, content, mime) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      exportDropdown.classList.remove('open');
+    }
+
+    $('exportMd').addEventListener('click', () => download('document.md', editor.value, 'text/markdown'));
+    $('exportTxt').addEventListener('click', () => download('document.txt', editor.value, 'text/plain'));
+
+    // ── Fullscreen ────────────────────────────────────────────────────
+
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      const isFs = !!document.fullscreenElement;
+      fullscreenBtn.textContent = isFs ? 'Exit Fullscreen' : 'Fullscreen';
+      fullscreenBtn.classList.toggle('active', isFs);
+    });
+
+    // ── Markdown highlight layer ──────────────────────────────────────
+
+    let hlTimer;
+
+    function scheduleHL() {
+      cancelAnimationFrame(hlTimer);
+      hlTimer = requestAnimationFrame(syncHL);
+    }
+
+    // Keep scroll positions in sync
+    editor.addEventListener('scroll', () => { editorHL.scrollTop = editor.scrollTop; });
+
+    function esc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function applyInlineHL(text) {
+      let t = esc(text);
+
+      // Stash inline code first so inner content isn't treated as markdown
+      const codes = [];
+      t = t.replace(/`([^`\n]+)`/g, m => {
+        codes.push(esc(m.slice(1, -1)));
+        return `\uFFFE${codes.length - 1}\uFFFE`;
+      });
+
+      t = t
+        .replace(/\*\*\*(.+?)\*\*\*/g,
+          '<span class="hl-s">***</span><strong><em>$1</em></strong><span class="hl-s">***</span>')
+        .replace(/\*\*(.+?)\*\*/g,
+          '<span class="hl-s">**</span><strong>$1</strong><span class="hl-s">**</span>')
+        .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,
+          '<span class="hl-s">*</span><em>$1</em><span class="hl-s">*</span>')
+        .replace(/~~(.+?)~~/g,
+          '<span class="hl-s">~~</span><s>$1</s><span class="hl-s">~~</span>')
+        .replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g,
+          '<span class="hl-link">[$1]($2)</span>');
+
+      // Restore code spans
+      t = t.replace(/\uFFFE(\d+)\uFFFE/g, (_, i) =>
+        `<span class="hl-s">\`</span><span class="hl-code">${codes[+i]}</span><span class="hl-s">\`</span>`
+      );
+      return t;
+    }
+
+    function syncHL() {
+      const html = editor.value.split('\n').map(line => {
+        // Heading
+        const hm = line.match(/^(#{1,6})([ \t].*|$)/);
+        if (hm) return `<span class="hl-s">${esc(hm[1])}</span><span class="hl-heading">${applyInlineHL(hm[2])}</span>`;
+
+        // Horizontal rule
+        if (/^---+\s*$/.test(line)) return `<span class="hl-s">${esc(line)}</span>`;
+
+        // Blockquote
+        const bqm = line.match(/^(> )(.*)$/);
+        if (bqm) return `<span class="hl-s">&gt; </span><span class="hl-quote">${applyInlineHL(bqm[2])}</span>`;
+
+        // Bullet list
+        const blm = line.match(/^([-*+] )(.*)$/);
+        if (blm) return `<span class="hl-s">${esc(blm[1])}</span>${applyInlineHL(blm[2])}`;
+
+        // Numbered list
+        const nlm = line.match(/^(\d+\. )(.*)$/);
+        if (nlm) return `<span class="hl-s">${esc(nlm[1])}</span>${applyInlineHL(nlm[2])}`;
+
+        // Code fence
+        if (/^```/.test(line)) return `<span class="hl-code-fence">${esc(line)}</span>`;
+
+        return applyInlineHL(line);
+      }).join('\n');
+
+      editorHL.innerHTML = html;
+      editorHL.scrollTop = editor.scrollTop;
+    }
+
+    // ── Caret pixel position (mirror div technique) ───────────────────
+
+    function getCaretPos(textarea) {
+      const mirror = document.createElement('div');
+      const cs = window.getComputedStyle(textarea);
+      ['fontFamily','fontSize','fontWeight','fontStyle','letterSpacing',
+       'lineHeight','paddingTop','paddingRight','paddingBottom','paddingLeft',
+       'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+       'boxSizing'].forEach(p => { mirror.style[p] = cs[p]; });
+      const rect = textarea.getBoundingClientRect();
+      mirror.style.position   = 'fixed';
+      mirror.style.top        = rect.top + 'px';
+      mirror.style.left       = rect.left + 'px';
+      mirror.style.width      = rect.width + 'px';
+      mirror.style.height     = rect.height + 'px';
+      mirror.style.overflow   = 'hidden';
+      mirror.style.visibility = 'hidden';
+      mirror.style.zIndex     = '-1';
+      mirror.style.whiteSpace = 'pre-wrap';
+      mirror.style.wordBreak  = 'break-word';
+      document.body.appendChild(mirror);
+      mirror.scrollTop = textarea.scrollTop;
+      mirror.appendChild(document.createTextNode(textarea.value.substring(0, textarea.selectionEnd)));
+      const marker = document.createElement('span');
+      marker.textContent = '\u200b';
+      mirror.appendChild(marker);
+      const r = marker.getBoundingClientRect();
+      document.body.removeChild(mirror);
+      return { top: r.top, left: r.left, bottom: r.bottom };
+    }
+
+    // ── Inline formatting ─────────────────────────────────────────────
+
+    function wrapSelection(prefix, suffix) {
+      suffix = suffix ?? prefix;
+      const start = editor.selectionStart;
+      const end   = editor.selectionEnd;
+      const sel   = editor.value.slice(start, end);
+      // Toggle off if already wrapped
+      if (editor.value.slice(start - prefix.length, start) === prefix &&
+          editor.value.slice(end, end + suffix.length) === suffix) {
+        editor.value = editor.value.slice(0, start - prefix.length) + sel + editor.value.slice(end + suffix.length);
+        editor.selectionStart = start - prefix.length;
+        editor.selectionEnd   = end   - prefix.length;
+      } else {
+        editor.value = editor.value.slice(0, start) + prefix + sel + suffix + editor.value.slice(end);
+        editor.selectionStart = start + prefix.length;
+        editor.selectionEnd   = end   + prefix.length;
+      }
+      editor.dispatchEvent(new Event('input'));
+      editor.focus();
+    }
+
+    function insertLink() {
+      const start = editor.selectionStart;
+      const end   = editor.selectionEnd;
+      const sel   = editor.value.slice(start, end) || 'link text';
+      const url   = prompt('URL:');
+      if (!url) { editor.focus(); return; }
+      const replacement = `[${sel}](${url})`;
+      editor.value = editor.value.slice(0, start) + replacement + editor.value.slice(end);
+      editor.selectionStart = start;
+      editor.selectionEnd   = start + replacement.length;
+      editor.dispatchEvent(new Event('input'));
+      editor.focus();
+      hideFmtToolbar();
+    }
+
+    // ── Floating format toolbar ───────────────────────────────────────
+
+    const fmtToolbar = $('fmtToolbar');
+
+    // Prevent mousedown from stealing focus / killing selection
+    fmtToolbar.addEventListener('mousedown', e => e.preventDefault());
+
+    fmtToolbar.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      if (action === 'bold')   wrapSelection('**');
+      if (action === 'italic') wrapSelection('*');
+      if (action === 'strike') wrapSelection('~~');
+      if (action === 'code')   wrapSelection('`');
+      if (action === 'link')   { insertLink(); return; }
+      hideFmtToolbar();
+    });
+
+    editor.addEventListener('mouseup', e => {
+      setTimeout(() => showFmtToolbar(e.clientX, e.clientY), 10);
+    });
+
+    editor.addEventListener('keyup', e => {
+      if (editor.selectionStart !== editor.selectionEnd) {
+        const pos = getCaretPos(editor);
+        showFmtToolbar(pos.left, pos.top);
+      } else {
+        hideFmtToolbar();
+      }
+    });
+
+    document.addEventListener('mousedown', e => {
+      if (!fmtToolbar.contains(e.target)) hideFmtToolbar();
+      if (!slashMenu.contains(e.target))  hideSlashMenu();
+    });
+
+    function showFmtToolbar(x, y) {
+      if (editor.selectionStart === editor.selectionEnd) { hideFmtToolbar(); return; }
+      const tw = fmtToolbar.offsetWidth || 210;
+      const lx = Math.min(Math.max(x - tw / 2, 8), window.innerWidth - tw - 8);
+      const ly = Math.max(y - 56, 8);
+      fmtToolbar.style.left = lx + 'px';
+      fmtToolbar.style.top  = ly + 'px';
+      fmtToolbar.classList.add('visible');
+    }
+
+    function hideFmtToolbar() {
+      fmtToolbar.classList.remove('visible');
+    }
+
+    // ── Slash commands ────────────────────────────────────────────────
+
+    const slashMenu = $('slashMenu');
+
+    const SLASH_CMDS = [
+      { label: 'Heading 1',     desc: 'Large heading',     icon: 'H1',  prefix: '# ' },
+      { label: 'Heading 2',     desc: 'Medium heading',    icon: 'H2',  prefix: '## ' },
+      { label: 'Heading 3',     desc: 'Small heading',     icon: 'H3',  prefix: '### ' },
+      { label: 'Bullet List',   desc: 'Unordered list',    icon: '•',   prefix: '- ' },
+      { label: 'Numbered List', desc: 'Ordered list',      icon: '1.',  prefix: '1. ' },
+      { label: 'Quote',         desc: 'Blockquote',        icon: '"',   prefix: '> ' },
+      { label: 'Code Block',    desc: 'Fenced code block', icon: '</>',  prefix: '```\n', suffix: '\n```' },
+      { label: 'Divider',       desc: 'Horizontal rule',   icon: '—',   prefix: '\n---\n' },
+    ];
+
+    let slashStart    = -1;
+    let slashActive   = 0;
+    let slashFiltered = [];
+
+    function checkSlashCommand() {
+      const pos = editor.selectionStart;
+      const val = editor.value;
+
+      if (slashStart !== -1) {
+        // Already tracking — update filter or close
+        if (pos <= slashStart || val[slashStart] !== '/') { hideSlashMenu(); return; }
+        const query = val.slice(slashStart + 1, pos);
+        if (query.includes('\n')) { hideSlashMenu(); return; }
+        renderSlashMenu(query.toLowerCase());
+        return;
+      }
+
+      // Detect fresh '/' at line start
+      if (val[pos - 1] !== '/') return;
+      const lineStart  = val.lastIndexOf('\n', pos - 2) + 1;
+      const textBefore = val.slice(lineStart, pos - 1);
+      if (textBefore.trim() !== '') return;
+
+      slashStart  = pos - 1;
+      slashActive = 0;
+      renderSlashMenu('');
+    }
+
+    function renderSlashMenu(query) {
+      slashFiltered = SLASH_CMDS.filter(c =>
+        !query || c.label.toLowerCase().includes(query) || c.desc.toLowerCase().includes(query)
+      );
+      if (!slashFiltered.length) { hideSlashMenu(); return; }
+
+      slashActive = Math.max(0, Math.min(slashActive, slashFiltered.length - 1));
+
+      slashMenu.innerHTML = slashFiltered.map((c, i) => `
+        <div class="slash-item${i === slashActive ? ' active' : ''}" data-index="${i}">
+          <div class="slash-icon">${c.icon}</div>
+          <div>
+            <div class="slash-label">${c.label}</div>
+            <div class="slash-desc">${c.desc}</div>
+          </div>
+        </div>`).join('');
+
+      // Position below caret
+      const pos   = getCaretPos(editor);
+      const menuH = Math.min(slashFiltered.length * 48 + 8, 300);
+      let   top   = pos.bottom + 6;
+      if (top + menuH > window.innerHeight - 8) top = pos.top - menuH - 6;
+      const left  = Math.min(Math.max(pos.left, 8), window.innerWidth - 248);
+      slashMenu.style.top  = top  + 'px';
+      slashMenu.style.left = left + 'px';
+      slashMenu.classList.add('visible');
+    }
+
+    function applySlashCommand(cmd) {
+      const pos    = editor.selectionStart;
+      const before = editor.value.slice(0, slashStart);
+      const after  = editor.value.slice(pos);
+      if (cmd.suffix) {
+        editor.value = before + cmd.prefix + cmd.suffix + after;
+        editor.selectionStart = editor.selectionEnd = slashStart + cmd.prefix.length;
+      } else {
+        editor.value = before + cmd.prefix + after;
+        editor.selectionStart = editor.selectionEnd = slashStart + cmd.prefix.length;
+      }
+      editor.dispatchEvent(new Event('input'));
+      editor.focus();
+      hideSlashMenu();
+    }
+
+    function hideSlashMenu() {
+      slashMenu.classList.remove('visible');
+      slashStart  = -1;
+      slashActive = 0;
+    }
+
+    slashMenu.addEventListener('click', e => {
+      const item = e.target.closest('.slash-item');
+      if (item) applySlashCommand(slashFiltered[+item.dataset.index]);
+    });
+
+    // Arrow key navigation inside slash menu
+    editor.addEventListener('keydown', e => {
+      if (!slashMenu.classList.contains('visible')) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        slashActive = (slashActive + 1) % slashFiltered.length;
+        slashMenu.querySelectorAll('.slash-item').forEach((el, i) => el.classList.toggle('active', i === slashActive));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        slashActive = (slashActive - 1 + slashFiltered.length) % slashFiltered.length;
+        slashMenu.querySelectorAll('.slash-item').forEach((el, i) => el.classList.toggle('active', i === slashActive));
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applySlashCommand(slashFiltered[slashActive]);
+      } else if (e.key === 'Escape') {
+        hideSlashMenu();
+      }
+    });
+
+    // ── Command palette ───────────────────────────────────────────────
+
+    function openPalette()  { paletteBackdrop.classList.add('open'); }
+    function closePalette() { paletteBackdrop.classList.remove('open'); }
+
+    paletteBackdrop.addEventListener('click', e => {
+      if (e.target === paletteBackdrop) closePalette();
+    });
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────
+    // ⌘/Ctrl + K          →  Show shortcuts
+    // ⌘/Ctrl + Shift + F  →  Focus mode
+    // ⌘/Ctrl + Shift + V  →  Preview
+    // ⌘/Ctrl + Shift + D  →  Toggle dark mode
+    // ⌘/Ctrl + Shift + G  →  Fullscreen
+
+    document.addEventListener('keydown', e => {
+      const mod = e.ctrlKey || e.metaKey;
+
+      // Esc closes palette
+      if (e.key === 'Escape') { closePalette(); return; }
+
+      // ⌘K — open palette
+      if (mod && !e.shiftKey && e.key === 'k') {
+        e.preventDefault();
+        paletteBackdrop.classList.contains('open') ? closePalette() : openPalette();
+        return;
+      }
+
+      // ⌘B / ⌘I — inline formatting
+      if (mod && !e.shiftKey && e.key === 'b') { e.preventDefault(); wrapSelection('**'); return; }
+      if (mod && !e.shiftKey && e.key === 'i') { e.preventDefault(); wrapSelection('*');  return; }
+
+      if (!mod || !e.shiftKey) return;
+      const map = {
+        F: toggleFocus,
+        V: togglePreview,
+        D: () => applyTheme(!isDark),
+        G: toggleFullscreen,
+      };
+      const fn = map[e.key.toUpperCase()];
+      if (fn) { e.preventDefault(); fn(); }
+
+      // ⌘, — settings
+      if (mod && !e.shiftKey && e.key === ',') { e.preventDefault(); openSettings(); }
+    });
+
+    // ── Settings ──────────────────────────────────────────────────────
+
+    const settingsBtn     = $('settingsBtn');
+    const settingsPanel   = $('settingsPanel');
+    const settingsOverlay = $('settingsOverlay');
+    const settingsClose   = $('settingsClose');
+    const fontSelect      = $('fontSelect');
+    const fontSizeVal     = $('fontSizeVal');
+    const fontSizeDisplay = $('fontSizeDisplay');
+    const fontSizeInc     = $('fontSizeInc');
+    const fontSizeDec     = $('fontSizeDec');
+
+    // Curated writing fonts (google: false = system font, no network request needed)
+    const FONTS = [
+      { label: 'Georgia',           value: 'Georgia',           google: false },
+      { label: 'Lora',              value: 'Lora',              google: true  },
+      { label: 'Playfair Display',  value: 'Playfair Display',  google: true  },
+      { label: 'Merriweather',      value: 'Merriweather',      google: true  },
+      { label: 'EB Garamond',       value: 'EB Garamond',       google: true  },
+      { label: 'Crimson Text',      value: 'Crimson Text',      google: true  },
+      { label: 'Inter',             value: 'Inter',             google: true  },
+      { label: 'Source Sans 3',     value: 'Source Sans 3',     google: true  },
+      { label: 'Nunito',            value: 'Nunito',            google: true  },
+      { label: 'IBM Plex Mono',     value: 'IBM Plex Mono',     google: true  },
+      { label: 'Inconsolata',       value: 'Inconsolata',       google: true  },
+    ];
+
+    // Populate font dropdown
+    FONTS.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.value;
+      opt.textContent = f.label;
+      fontSelect.appendChild(opt);
+    });
+
+    function loadGoogleFont(name) {
+      const id = 'gf-' + name.replace(/\s+/g, '-');
+      if (document.getElementById(id)) return;
+      const link = document.createElement('link');
+      link.id   = id;
+      link.rel  = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,400;0,700;1,400&display=swap`;
+      document.head.appendChild(link);
+    }
+
+    function applyFont(name) {
+      const font = FONTS.find(f => f.value === name);
+      if (!font) return;
+      if (font.google) loadGoogleFont(name);
+      const stack = font.google ? `'${name}', Georgia, serif` : `Georgia, 'Times New Roman', serif`;
+      document.documentElement.style.setProperty('--editor-font', stack);
+      fontSelect.value = name;
+      localStorage.setItem('writer-font', name);
+      syncHL();
+    }
+
+    let currentFontSize = 19;
+
+    function applyFontSize(size) {
+      currentFontSize = Math.min(28, Math.max(14, size));
+      document.documentElement.style.setProperty('--font-size', currentFontSize + 'px');
+      fontSizeVal.textContent     = currentFontSize + 'px';
+      fontSizeDisplay.textContent = currentFontSize;
+      localStorage.setItem('writer-font-size', currentFontSize);
+      syncHL();
+    }
+
+    fontSelect.addEventListener('change', () => applyFont(fontSelect.value));
+    fontSizeInc.addEventListener('click', () => applyFontSize(currentFontSize + 1));
+    fontSizeDec.addEventListener('click', () => applyFontSize(currentFontSize - 1));
+
+    // Toolbar position
+    const TB_CLASSES = ['tb-top', 'tb-bottom', 'tb-left', 'tb-right'];
+
+    function applyToolbarPos(pos) {
+      document.body.classList.remove(...TB_CLASSES);
+      if (pos !== 'bottom') document.body.classList.add('tb-' + pos);
+      settingsPanel.querySelectorAll('.pos-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.pos === pos);
+      });
+      localStorage.setItem('writer-toolbar-pos', pos);
+    }
+
+    settingsPanel.querySelectorAll('.pos-btn').forEach(b => {
+      b.addEventListener('click', () => applyToolbarPos(b.dataset.pos));
+    });
+
+    // Open / close
+    function openSettings()  {
+      settingsPanel.classList.add('open');
+      settingsOverlay.classList.add('open');
+    }
+    function closeSettings() {
+      settingsPanel.classList.remove('open');
+      settingsOverlay.classList.remove('open');
+    }
+
+    settingsBtn.addEventListener('click', openSettings);
+    settingsClose.addEventListener('click', closeSettings);
+    settingsOverlay.addEventListener('click', closeSettings);
+
+    // Load saved settings
+    const savedFont    = localStorage.getItem('writer-font');
+    const savedSize    = localStorage.getItem('writer-font-size');
+    const savedTbPos   = localStorage.getItem('writer-toolbar-pos') || 'bottom';
+
+    if (savedFont) applyFont(savedFont);
+    if (savedSize) applyFontSize(+savedSize);
+    applyToolbarPos(savedTbPos);
+  </script>
+</body>
+</html>
