@@ -9,18 +9,17 @@ A minimalist, browser-based writing app inspired by [iA Writer](https://ia.net/w
 - [Overview](#overview)
 - [Getting Started](#getting-started)
 - [Features](#features)
+  - [Daily Notes](#daily-notes)
   - [Writing Surface](#writing-surface)
   - [Live Markdown Highlighting](#live-markdown-highlighting)
   - [Inline Formatting Toolbar](#inline-formatting-toolbar)
   - [Slash Commands](#slash-commands)
   - [Focus Mode](#focus-mode)
-  - [Preview Mode](#preview-mode)
   - [Dark Mode](#dark-mode)
   - [Fullscreen](#fullscreen)
   - [Settings Panel](#settings-panel)
   - [Word & Character Count](#word--character-count)
   - [Auto-Save](#auto-save)
-  - [Export](#export)
   - [Toolbar](#toolbar)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Tech Stack](#tech-stack)
@@ -31,7 +30,7 @@ A minimalist, browser-based writing app inspired by [iA Writer](https://ia.net/w
 
 ## Overview
 
-Tipun is a single-file writing app. The entire application — HTML, CSS, and JavaScript — lives in one `index.html` file with no build step and no dependencies to install. It is designed to remove everything between you and your words.
+Tipun is a single-file writing app built around **one note per date**. The entire application — HTML, CSS, and JavaScript — lives in one `index.html` file with no build step and no dependencies to install. You write in a full-screen editor and switch days from the calendar controls in the bottom toolbar.
 
 ---
 
@@ -50,13 +49,20 @@ No server required. Works entirely offline once loaded (except Google Fonts, whi
 
 ## Features
 
+### Daily Notes
+
+- Every note is keyed by date in `YYYY-MM-DD` format
+- Changing the date switches the editor to that day’s note
+- Notes are created lazily — opening a new date starts a blank page for that day
+- `Today`, previous-day, next-day, and calendar controls are always available in the bottom toolbar
+
 ### Writing Surface
 
-- Full-height writing area centred on the page with a `660px` maximum width
-- The first line starts at the **vertical centre** of the viewport — the page feels empty and welcoming, not top-heavy
+- Full-height writing area centred on the page for a focused, full-screen writing experience
+- The first line starts near the vertical centre of the viewport, so the page feels open instead of top-heavy
 - Text grows downward naturally as you write
 - Georgia serif by default, configurable via Settings
-- Hidden scrollbar — the page scrolls silently
+- Hidden editor scrollbars keep the interface visually quiet
 
 ### Live Markdown Highlighting
 
@@ -116,24 +122,10 @@ Type `/` at the **start of a line** (no other text on that line before the slash
 
 ### Focus Mode
 
-Activates a CSS gradient mask that fades out the text above and below the current region of the page, leaving only a band of full-opacity text in the centre. This removes peripheral distraction without hiding your document.
+Applies a CSS gradient mask that fades out the text above and below the current region of the page, leaving a band of full-opacity text in the centre.
 
 - Toggle with the **Focus** button in the toolbar or `⌘⇧F`
 - The toolbar fades out automatically while writing in Focus mode; hover the bottom edge to reveal it
-
-### Preview Mode
-
-Switches from the raw markdown editor to a fully rendered HTML preview using [marked.js](https://marked.js.org/). Supports:
-
-- Headings (H1–H6)
-- Bold, italic, strikethrough
-- Inline code and fenced code blocks
-- Bullet and numbered lists
-- Blockquotes
-- Horizontal rules
-- Links
-
-Toggle with the **Preview** button or `⌘⇧V`. The button label changes to **Edit** to switch back.
 
 ### Dark Mode
 
@@ -151,22 +143,11 @@ Toggle with the **Fullscreen** button or `⌘⇧G`. The button label updates to 
 
 Click the **⚙** button in the toolbar (or press `⌘,`) to open the settings panel, which slides in from the right side of the screen.
 
-#### Toolbar Position
-
-Move the toolbar to any edge of the window:
-
-| Position | Behaviour |
-|---|---|
-| **Bottom** (default) | Horizontal bar at the bottom, fades while writing |
-| **Top** | Horizontal bar at the top, fades while writing |
-| **Left** | Vertical sidebar on the left (120px wide) |
-| **Right** | Vertical sidebar on the right (120px wide) |
-
-Page padding adjusts automatically. The export dropdown repositions to stay within the viewport.
+The toolbar stays fixed at the bottom so the writing surface remains full-screen and the calendar controls are always in the same place.
 
 #### Font
 
-Choose from 11 curated writing fonts. Google Fonts are loaded lazily the first time they are selected — no requests are made for fonts you never use.
+Choose from a curated set of writing fonts. Google Fonts are loaded lazily the first time they are selected — no requests are made for fonts you never use.
 
 | Font | Category |
 |---|---|
@@ -184,33 +165,29 @@ Choose from 11 curated writing fonts. Google Fonts are loaded lazily the first t
 
 #### Font Size
 
-Increase or decrease the editor font size using the **+** and **−** buttons. Range: **14px – 28px**. The current value is shown live. Both the editor and the preview update instantly.
+Increase or decrease the editor font size using the **+** and **−** buttons. Range: **14px – 28px**. The current value is shown live. The editor updates instantly.
 
 ### Word & Character Count
 
 Displayed in the toolbar at all times:
 
-- **Word count** — counts space-separated tokens, ignores leading/trailing whitespace. Shows "1 word" (singular) when appropriate.
-- **Character count** — raw character count including spaces and punctuation.
+- **Word count** — counts space-separated tokens for the current date’s note, ignoring leading/trailing whitespace. Shows "1 word" (singular) when appropriate.
+- **Character count** — raw character count for the current note, including spaces and punctuation.
 
-Both update on every keystroke.
+Both update on every keystroke as you switch between dates.
 
 ### Auto-Save
 
-Every keystroke is saved to `localStorage` under the key `writer-content`. Your document survives tab closes, refreshes, and browser restarts — no manual save required.
-
-### Export
-
-Click **Export ↑** to open the export dropdown:
-
-- **Save as .md** — downloads your raw markdown as `document.md`
-- **Save as .txt** — downloads plain text as `document.txt`
-
-Files are generated in the browser via `Blob` + `URL.createObjectURL` — nothing is uploaded anywhere.
+Every keystroke is saved to `localStorage` under a date-keyed notes object. The active date is also persisted, so your daily notes survive tab closes, refreshes, and browser restarts — no manual save required.
 
 ### Toolbar
 
-The toolbar auto-hides while you are actively typing (after a 1.5 s idle timeout it reappears). It is always visible on hover. In Focus mode it fades out further and requires a deliberate hover to peek.
+The toolbar auto-hides while you are actively typing (after a 1.5 s idle timeout it reappears). It is always visible on hover. It includes:
+
+- A native date picker for jumping to any note
+- Previous-day and next-day navigation
+- A quick jump back to today
+- Focus, Dark mode, Fullscreen, and Settings
 
 ---
 
@@ -223,9 +200,10 @@ The toolbar auto-hides while you are actively typing (after a 1.5 s idle timeout
 | `⌘K` / `Ctrl+K` | Show / hide shortcuts palette |
 | `⌘,` / `Ctrl+,` | Open Settings |
 | `⌘⇧F` / `Ctrl+Shift+F` | Toggle Focus mode |
-| `⌘⇧V` / `Ctrl+Shift+V` | Toggle Preview |
 | `⌘⇧D` / `Ctrl+Shift+D` | Toggle Dark mode |
 | `⌘⇧G` / `Ctrl+Shift+G` | Toggle Fullscreen |
+| `Alt+←` | Open previous day’s note |
+| `Alt+→` | Open next day’s note |
 | `Tab` | Insert 2 spaces (does not move focus) |
 | `/` at line start | Open slash command menu |
 | `↑` / `↓` | Navigate slash menu |
@@ -241,9 +219,8 @@ The toolbar auto-hides while you are actively typing (after a 1.5 s idle timeout
 | Markup | HTML5 |
 | Styling | Vanilla CSS (custom properties, CSS Grid, Flexbox) |
 | Logic | Vanilla JavaScript (ES2020, no framework) |
-| Markdown parsing (preview) | [marked.js](https://marked.js.org/) via CDN |
 | Fonts | Google Fonts (loaded on demand) |
-| Storage | Browser `localStorage` |
+| Storage | Browser `localStorage` with date-keyed notes and active date |
 | Distribution | Single static file — no bundler, no server |
 
 ---
@@ -263,7 +240,8 @@ Everything is intentionally kept in one file to make it trivially portable — c
 
 | Key | Type | Description |
 |---|---|---|
-| `writer-content` | `string` | The full document text |
+| `writer-notes-by-date` | `Record<string, string>` | Date-keyed note contents, e.g. `{ "2026-04-07": "..." }` |
+| `writer-active-date` | `string` | The active note date |
 | `writer-theme` | `"light"` \| `"dark"` | Current colour theme |
 | `writer-font` | `string` | Selected font name (e.g. `"Lora"`) |
 | `writer-font-size` | `number` | Font size in px (14–28) |
