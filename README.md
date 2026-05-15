@@ -14,6 +14,7 @@ A minimalist, browser-based writing app inspired by [iA Writer](https://ia.net/w
   - [Live Markdown Highlighting](#live-markdown-highlighting)
   - [Inline Formatting Toolbar](#inline-formatting-toolbar)
   - [Slash Commands](#slash-commands)
+  - [Command Palette](#command-palette)
   - [Focus Mode](#focus-mode)
   - [Dark Mode](#dark-mode)
   - [Fullscreen](#fullscreen)
@@ -114,11 +115,18 @@ Type `/` at the **start of a line** (no other text on that line before the slash
 | `/h3` or `/heading 3` | `### ` |
 | `/bullet` | `- ` |
 | `/numbered` | `1. ` |
+| `/todo` or `/task` | `- [ ] ` |
 | `/quote` | `> ` |
 | `/code` | ` ```…``` ` block |
 | `/divider` | `---` |
 
 **Navigation:** `↑` / `↓` to move, `Enter` or `Tab` to apply, `Esc` to dismiss.
+
+### Command Palette
+
+Press `⌘K` / `Ctrl+K` to open the command palette. It is the main control surface for non-writing actions: jumping dates, toggling Focus/Dark/Fullscreen, opening Settings, changing text size, copying the note, and exporting Markdown.
+
+You can also type a date such as `2026-04-28`, `today`, `yesterday`, or `tomorrow` to jump directly to that day’s note.
 
 ### Focus Mode
 
@@ -197,14 +205,15 @@ The toolbar auto-hides while you are actively typing (after a 1.5 s idle timeout
 |---|---|
 | `⌘B` / `Ctrl+B` | Bold selected text |
 | `⌘I` / `Ctrl+I` | Italic selected text |
-| `⌘K` / `Ctrl+K` | Show / hide shortcuts palette |
+| `⌘K` / `Ctrl+K` | Open command palette |
 | `⌘,` / `Ctrl+,` | Open Settings |
 | `⌘⇧F` / `Ctrl+Shift+F` | Toggle Focus mode |
 | `⌘⇧D` / `Ctrl+Shift+D` | Toggle Dark mode |
 | `⌘⇧G` / `Ctrl+Shift+G` | Toggle Fullscreen |
 | `Alt+←` | Open previous day’s note |
 | `Alt+→` | Open next day’s note |
-| `Tab` | Insert 2 spaces (does not move focus) |
+| `Enter` in a list | Continue bullets, numbers, quotes, or todos |
+| `Tab` / `Shift+Tab` | Indent / outdent current line or selection |
 | `/` at line start | Open slash command menu |
 | `↑` / `↓` | Navigate slash menu |
 | `Enter` / `Tab` | Apply selected slash command |
@@ -245,7 +254,6 @@ Everything is intentionally kept in one file to make it trivially portable — c
 | `writer-theme` | `"light"` \| `"dark"` | Current colour theme |
 | `writer-font` | `string` | Selected font name (e.g. `"Lora"`) |
 | `writer-font-size` | `number` | Font size in px (14–28) |
-| `writer-toolbar-pos` | `"top"` \| `"bottom"` \| `"left"` \| `"right"` | Toolbar position |
 
 To reset all settings and clear the document, run in the browser console:
 

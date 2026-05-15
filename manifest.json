@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Tipun",
+  "version": "1.0.0",
+  "description": "A distraction-free daily notes editor for your new tab.",
+  "icons": {
+    "16": "logo.svg",
+    "48": "logo.svg",
+    "128": "logo.svg"
+  },
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; default-src 'self'"
+  }
+}
